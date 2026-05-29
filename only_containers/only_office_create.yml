@@ -47,11 +47,8 @@
       mysql: "docker.io/mysql:8.4"
       docs:  "docker.io/onlyoffice/documentserver:latest"
       app:   "docker.io/onlyoffice/communityserver:latest"
-    zfs:
-      pool:   "<ZFS_POOL>"
-      parent: "<ZFS_POOL>/only_office"
-    mnt:
-      base: "/<ZFS_POOL>/only_office"
+    # Basisverzeichnis für persistente Volumes auf dem Host
+    data_dir: "/var/pods/only_office"
     jwt_secret: "BITTE_AENDERN_JWT_SECRET"
     # MySQL 8.4 Strict Mode lässt die ONLYOFFICE-Schema-SQL (Zero-Date-Defaults)
     # nicht zu. Der permissive sql_mode ist hier erforderlich.
@@ -70,33 +67,10 @@
         - "{{ images.docs }}"
         - "{{ images.app }}"
 
-    # ── 2. ZFS-Datasets anlegen ──────────────────────────────────────────────
-    - name: Übergeordnetes ZFS-Dataset anlegen
-      community.general.zfs:
-        name:  "{{ zfs.parent }}"
-        state: present
-        extra_zfs_properties:
-          compression: lz4
-
-    - name: ZFS-Datasets für persistente Volumes anlegen
-      community.general.zfs:
-        name:  "{{ zfs.pool }}/only_office/{{ item }}"
-        state: present
-        extra_zfs_properties:
-          compression: lz4
-      loop:
-        - mysql
-        - docs_pgsql
-        - docs_data
-        - docs_logs
-        - docs_lib
-        - app_data
-        - app_logs
-
-    # ── 3. Berechtigungen setzen ─────────────────────────────────────────────
-    - name: Berechtigungen auf Volume-Verzeichnissen setzen
+    # ── 2. Verzeichnisse anlegen ─────────────────────────────────────────────
+    - name: Persistente Volume-Verzeichnisse anlegen
       ansible.builtin.file:
-        path:  "{{ mnt.base }}/{{ item }}"
+        path:  "{{ data_dir }}/{{ item }}"
         owner: root
         group: root
         mode:  '0777'
@@ -122,7 +96,7 @@
         mac_address: "{{ mysql.mac }}"
         command:     "--sql-mode={{ mysql_sql_mode }}"
         volumes:
-          - "{{ mnt.base }}/mysql:/var/lib/mysql:Z"
+          - "{{ data_dir }}/mysql:/var/lib/mysql:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           MYSQL_ROOT_PASSWORD: "{{ mysql.root_password }}"
@@ -159,10 +133,10 @@
         network:     "{{ net }}:ip={{ docs.ip }}"
         mac_address: "{{ docs.mac }}"
         volumes:
-          - "{{ mnt.base }}/docs_pgsql:/var/lib/postgresql:Z"
-          - "{{ mnt.base }}/docs_data:/var/www/onlyoffice/Data:Z"
-          - "{{ mnt.base }}/docs_logs:/var/log/onlyoffice:Z"
-          - "{{ mnt.base }}/docs_lib:/var/lib/onlyoffice:Z"
+          - "{{ data_dir }}/docs_pgsql:/var/lib/postgresql:Z"
+          - "{{ data_dir }}/docs_data:/var/www/onlyoffice/Data:Z"
+          - "{{ data_dir }}/docs_logs:/var/log/onlyoffice:Z"
+          - "{{ data_dir }}/docs_lib:/var/lib/onlyoffice:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           JWT_ENABLED: "true"
@@ -194,8 +168,8 @@
         network:     "{{ net }}:ip={{ app.ip }}"
         mac_address: "{{ app.mac }}"
         volumes:
-          - "{{ mnt.base }}/app_data:/var/www/onlyoffice/Data:Z"
-          - "{{ mnt.base }}/app_logs:/var/log/onlyoffice:Z"
+          - "{{ data_dir }}/app_data:/var/www/onlyoffice/Data:Z"
+          - "{{ data_dir }}/app_logs:/var/log/onlyoffice:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           MYSQL_SERVER_HOST:                "{{ mysql.ip }}"

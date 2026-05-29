@@ -75,20 +75,26 @@ Die OnlyOffice-Integration wird vom Playbook automatisch konfiguriert:
 
 ---
 
-## Persistente Speicherung (ZFS)
+## Persistente Speicherung
 
-Alle persistenten Daten liegen auf ZFS-Datasets mit lz4-Komprimierung.
+Alle persistenten Daten liegen in Unterverzeichnissen unter `/var/pods/nextcloud/`
+auf dem Host-System. Das Playbook legt diese Verzeichnisse beim ersten Lauf
+automatisch an.
 
-| Dataset                        | Eingebunden in Container bei | Container  |
-|--------------------------------|------------------------------|------------|
-| `<ZFS_POOL>/nextcloud/mariadb` | `/var/lib/mysql`             | nc-mariadb |
-| `<ZFS_POOL>/nextcloud/app_html`| `/var/www/html`              | nc-app     |
-| `<ZFS_POOL>/nextcloud/docs_pgsql` | `/var/lib/postgresql`     | nc-docs    |
-| `<ZFS_POOL>/nextcloud/docs_data`  | `/var/www/onlyoffice/Data`| nc-docs    |
-| `<ZFS_POOL>/nextcloud/docs_logs`  | `/var/log/onlyoffice`     | nc-docs    |
-| `<ZFS_POOL>/nextcloud/docs_lib`   | `/var/lib/onlyoffice`     | nc-docs    |
+```
+/var/pods/nextcloud/
+├── mariadb/       → /var/lib/mysql          (nc-mariadb)
+├── app_html/      → /var/www/html           (nc-app)
+├── docs_pgsql/    → /var/lib/postgresql     (nc-docs)
+├── docs_data/     → /var/www/onlyoffice/Data (nc-docs)
+├── docs_logs/     → /var/log/onlyoffice     (nc-docs)
+└── docs_lib/      → /var/lib/onlyoffice     (nc-docs)
+```
 
-Valkey-Daten sind ephemeral (nur im Container, kein persistentes Volume).
+Valkey-Daten sind ephemeral (kein persistentes Volume).
+
+Das Basisverzeichnis kann in `nextcloud_create.yml` über die Variable
+`data_dir` angepasst werden (Standard: `/var/pods/nextcloud`).
 
 ---
 
@@ -119,12 +125,8 @@ docs:
   ip:  "<IP_NC_DOCS>"
   mac: "<MAC_NC_DOCS>"
 
-# ZFS
-zfs:
-  pool:   "<ZFS_POOL>"
-  parent: "<ZFS_POOL>/nextcloud"
-mnt:
-  base: "/<ZFS_POOL>/nextcloud"
+# Persistenter Speicher — Basisverzeichnis auf dem Host
+data_dir: "/var/pods/nextcloud"  # nach Bedarf anpassen
 
 # Passwörter und Secrets — UNBEDINGT vor Produktiveinsatz ändern
 mariadb:
@@ -197,8 +199,8 @@ mit der bestehenden Datenbank und Installation.
 ```bash
 ansible-playbook -i hosts.yml vier_container/nextcloud_delete.yml
 
-# Auf dem Zielsystem — ZFS-Datasets löschen
-zfs destroy -r <ZFS_POOL>/nextcloud
+# Auf dem Zielsystem — Datenpersistenz löschen
+rm -rf /var/pods/nextcloud
 
 ansible-playbook -i hosts.yml vier_container/nextcloud_create.yml
 ```

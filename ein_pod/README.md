@@ -61,20 +61,26 @@ Listen-Port von 80 auf 8080.
 
 ---
 
-## Persistente Speicherung (ZFS)
+## Persistente Speicherung
 
-Alle persistenten Daten liegen auf ZFS-Datasets mit lz4-Komprimierung.
+Alle persistenten Daten liegen in Unterverzeichnissen unter `/var/pods/nextcloud_pod/`
+auf dem Host-System. Das Playbook legt diese Verzeichnisse beim ersten Lauf
+automatisch an.
 
-| Dataset                              | Eingebunden bei              | Container    |
-|--------------------------------------|------------------------------|--------------|
-| `<ZFS_POOL>/nextcloud_pod/mariadb`   | `/var/lib/mysql`             | ncp-mariadb  |
-| `<ZFS_POOL>/nextcloud_pod/app_html`  | `/var/www/html`              | ncp-app      |
-| `<ZFS_POOL>/nextcloud_pod/docs_pgsql`| `/var/lib/postgresql`        | ncp-docs     |
-| `<ZFS_POOL>/nextcloud_pod/docs_data` | `/var/www/onlyoffice/Data`   | ncp-docs     |
-| `<ZFS_POOL>/nextcloud_pod/docs_logs` | `/var/log/onlyoffice`        | ncp-docs     |
-| `<ZFS_POOL>/nextcloud_pod/docs_lib`  | `/var/lib/onlyoffice`        | ncp-docs     |
+```
+/var/pods/nextcloud_pod/
+├── mariadb/       → /var/lib/mysql           (ncp-mariadb)
+├── app_html/      → /var/www/html            (ncp-app)
+├── docs_pgsql/    → /var/lib/postgresql      (ncp-docs)
+├── docs_data/     → /var/www/onlyoffice/Data (ncp-docs)
+├── docs_logs/     → /var/log/onlyoffice      (ncp-docs)
+└── docs_lib/      → /var/lib/onlyoffice      (ncp-docs)
+```
 
 Valkey-Daten sind ephemeral (kein persistentes Volume).
+
+Das Basisverzeichnis kann in `pod_vars.yml` über die Variable `data_dir`
+angepasst werden (Standard: `/var/pods/nextcloud_pod`).
 
 ---
 
@@ -87,12 +93,8 @@ Alle umgebungsspezifischen Werte befinden sich in `pod_vars.yml`:
 app:
   trusted_domain: "<HOST_IP_ODER_HOSTNAME>"
 
-# ZFS-Pool
-zfs:
-  pool:   "<ZFS_POOL>"
-  parent: "<ZFS_POOL>/nextcloud_pod"
-mnt:
-  base: "/<ZFS_POOL>/nextcloud_pod"
+# Persistenter Speicher — Basisverzeichnis auf dem Host
+data_dir: "/var/pods/nextcloud_pod"  # nach Bedarf anpassen
 
 # Passwörter — UNBEDINGT vor Produktiveinsatz ändern
 mariadb:
@@ -171,8 +173,8 @@ bestehenden Datenbank und Nextcloud-Installation.
 ```bash
 ansible-playbook -i hosts.yml ein_pod/pod_delete.yml
 
-# Auf dem Zielsystem — ZFS-Datasets löschen
-zfs destroy -r <ZFS_POOL>/nextcloud_pod
+# Auf dem Zielsystem — Datenpersistenz löschen
+rm -rf /var/pods/nextcloud_pod
 
 ansible-playbook -i hosts.yml ein_pod/pod_create.yml
 ```

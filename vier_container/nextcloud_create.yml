@@ -53,11 +53,8 @@
       redis:   "docker.io/valkey/valkey:alpine"
       app:     "docker.io/nextcloud:latest"
       docs:    "docker.io/onlyoffice/documentserver:latest"
-    zfs:
-      pool:   "<ZFS_POOL>"
-      parent: "<ZFS_POOL>/nextcloud"
-    mnt:
-      base: "/<ZFS_POOL>/nextcloud"
+    # Basisverzeichnis für persistente Volumes auf dem Host
+    data_dir: "/var/pods/nextcloud"
     # JWT-Secret wird zwischen Document Server und Nextcloud-Connector geteilt.
     # Muss auf beiden Seiten identisch sein.
     jwt_secret: "BITTE_AENDERN_JWT_SECRET"
@@ -85,32 +82,10 @@
         - "{{ images.app }}"
         - "{{ images.docs }}"
 
-    # ── 2. ZFS-Datasets anlegen ──────────────────────────────────────────────
-    - name: Übergeordnetes ZFS-Dataset anlegen
-      community.general.zfs:
-        name:  "{{ zfs.parent }}"
-        state: present
-        extra_zfs_properties:
-          compression: lz4
-
-    - name: ZFS-Datasets für persistente Volumes anlegen
-      community.general.zfs:
-        name:  "{{ zfs.pool }}/nextcloud/{{ item }}"
-        state: present
-        extra_zfs_properties:
-          compression: lz4
-      loop:
-        - mariadb
-        - app_html
-        - docs_pgsql
-        - docs_data
-        - docs_logs
-        - docs_lib
-
-    # ── 3. Berechtigungen setzen ─────────────────────────────────────────────
-    - name: Berechtigungen auf Volume-Verzeichnissen setzen
+    # ── 2. Verzeichnisse anlegen ─────────────────────────────────────────────
+    - name: Persistente Volume-Verzeichnisse anlegen
       ansible.builtin.file:
-        path:  "{{ mnt.base }}/{{ item }}"
+        path:  "{{ data_dir }}/{{ item }}"
         owner: root
         group: root
         mode:  '0777'
@@ -132,7 +107,7 @@
         network:     "{{ net }}:ip={{ mariadb.ip }}"
         mac_address: "{{ mariadb.mac }}"
         volumes:
-          - "{{ mnt.base }}/mariadb:/var/lib/mysql:Z"
+          - "{{ data_dir }}/mariadb:/var/lib/mysql:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           MARIADB_ROOT_PASSWORD:      "{{ mariadb.root_password }}"
@@ -184,10 +159,10 @@
         network:     "{{ net }}:ip={{ docs.ip }}"
         mac_address: "{{ docs.mac }}"
         volumes:
-          - "{{ mnt.base }}/docs_pgsql:/var/lib/postgresql:Z"
-          - "{{ mnt.base }}/docs_data:/var/www/onlyoffice/Data:Z"
-          - "{{ mnt.base }}/docs_logs:/var/log/onlyoffice:Z"
-          - "{{ mnt.base }}/docs_lib:/var/lib/onlyoffice:Z"
+          - "{{ data_dir }}/docs_pgsql:/var/lib/postgresql:Z"
+          - "{{ data_dir }}/docs_data:/var/www/onlyoffice/Data:Z"
+          - "{{ data_dir }}/docs_logs:/var/log/onlyoffice:Z"
+          - "{{ data_dir }}/docs_lib:/var/lib/onlyoffice:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           JWT_ENABLED: "true"
@@ -202,7 +177,7 @@
         network:     "{{ net }}:ip={{ app.ip }}"
         mac_address: "{{ app.mac }}"
         volumes:
-          - "{{ mnt.base }}/app_html:/var/www/html:Z"
+          - "{{ data_dir }}/app_html:/var/www/html:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           MYSQL_HOST:                "{{ mariadb.ip }}"

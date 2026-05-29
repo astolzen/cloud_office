@@ -53,32 +53,10 @@
         - "{{ images.app }}"
         - "{{ images.docs }}"
 
-    # ── 2. ZFS-Datasets anlegen ──────────────────────────────────────────────
-    - name: Übergeordnetes ZFS-Dataset anlegen
-      community.general.zfs:
-        name:  "{{ zfs.parent }}"
-        state: present
-        extra_zfs_properties:
-          compression: lz4
-
-    - name: ZFS-Datasets für persistente Volumes anlegen
-      community.general.zfs:
-        name:  "{{ zfs.parent }}/{{ item }}"
-        state: present
-        extra_zfs_properties:
-          compression: lz4
-      loop:
-        - mariadb
-        - app_html
-        - docs_pgsql
-        - docs_data
-        - docs_logs
-        - docs_lib
-
-    # ── 3. Berechtigungen setzen ─────────────────────────────────────────────
-    - name: Berechtigungen auf Volume-Verzeichnissen setzen
+    # ── 2. Verzeichnisse anlegen ─────────────────────────────────────────────
+    - name: Persistente Volume-Verzeichnisse anlegen
       ansible.builtin.file:
-        path:  "{{ mnt.base }}/{{ item }}"
+        path:  "{{ data_dir }}/{{ item }}"
         owner: root
         group: root
         mode:  '0777'
@@ -109,7 +87,7 @@
         image:   "{{ images.mariadb }}"
         state:   started
         volumes:
-          - "{{ mnt.base }}/mariadb:/var/lib/mysql:Z"
+          - "{{ data_dir }}/mariadb:/var/lib/mysql:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           MARIADB_ROOT_PASSWORD:      "{{ mariadb.root_password }}"
@@ -158,10 +136,10 @@
         image:   "{{ images.docs }}"
         state:   started
         volumes:
-          - "{{ mnt.base }}/docs_pgsql:/var/lib/postgresql:Z"
-          - "{{ mnt.base }}/docs_data:/var/www/onlyoffice/Data:Z"
-          - "{{ mnt.base }}/docs_logs:/var/log/onlyoffice:Z"
-          - "{{ mnt.base }}/docs_lib:/var/lib/onlyoffice:Z"
+          - "{{ data_dir }}/docs_pgsql:/var/lib/postgresql:Z"
+          - "{{ data_dir }}/docs_data:/var/www/onlyoffice/Data:Z"
+          - "{{ data_dir }}/docs_logs:/var/log/onlyoffice:Z"
+          - "{{ data_dir }}/docs_lib:/var/lib/onlyoffice:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           JWT_ENABLED: "true"
@@ -202,7 +180,7 @@
         image:   "{{ images.app }}"
         state:   started
         volumes:
-          - "{{ mnt.base }}/app_html:/var/www/html:Z"
+          - "{{ data_dir }}/app_html:/var/www/html:Z"
           - "/etc/localtime:/etc/localtime:ro"
         env:
           MYSQL_HOST:                "127.0.0.1"

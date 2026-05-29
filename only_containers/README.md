@@ -72,21 +72,27 @@ Schema ab. MySQL wird daher mit dem permissiven `sql_mode`
 
 ---
 
-## Persistente Speicherung (ZFS)
+## Persistente Speicherung
 
-Alle Daten liegen unter `<ZFS_POOL>/only_office/` in lz4-komprimierten Datasets.
+Alle persistenten Daten liegen in Unterverzeichnissen unter `/var/pods/only_office/`
+auf dem Host-System. Das Playbook legt diese Verzeichnisse beim ersten Lauf
+automatisch an.
 
-| Dataset       | Eingebunden bei                     | Container          |
-|---------------|-------------------------------------|--------------------|
-| `mysql`       | `/var/lib/mysql`                    | only-office-mysql  |
-| `docs_pgsql`  | `/var/lib/postgresql`               | only-office-docs   |
-| `docs_data`   | `/var/www/onlyoffice/Data`          | only-office-docs   |
-| `docs_logs`   | `/var/log/onlyoffice`               | only-office-docs   |
-| `docs_lib`    | `/var/lib/onlyoffice`               | only-office-docs   |
-| `app_data`    | `/var/www/onlyoffice/Data`          | only-office-app    |
-| `app_logs`    | `/var/log/onlyoffice`               | only-office-app    |
+```
+/var/pods/only_office/
+├── mysql/         → /var/lib/mysql              (only-office-mysql)
+├── docs_pgsql/    → /var/lib/postgresql         (only-office-docs)
+├── docs_data/     → /var/www/onlyoffice/Data    (only-office-docs)
+├── docs_logs/     → /var/log/onlyoffice         (only-office-docs)
+├── docs_lib/      → /var/lib/onlyoffice         (only-office-docs)
+├── app_data/      → /var/www/onlyoffice/Data    (only-office-app)
+└── app_logs/      → /var/log/onlyoffice         (only-office-app)
+```
 
 Daten bleiben über Container-Neustarts und `only_office_delete.yml` hinweg erhalten.
+
+Das Basisverzeichnis kann in `only_office_create.yml` über die Variable
+`data_dir` angepasst werden (Standard: `/var/pods/only_office`).
 
 ---
 
@@ -110,12 +116,8 @@ app:
   ip:  "<IP_OO_APP>"
   mac: "<MAC_OO_APP>"
 
-# ZFS
-zfs:
-  pool:   "<ZFS_POOL>"
-  parent: "<ZFS_POOL>/only_office"
-mnt:
-  base: "/<ZFS_POOL>/only_office"
+# Persistenter Speicher — Basisverzeichnis auf dem Host
+data_dir: "/var/pods/only_office"  # nach Bedarf anpassen
 
 # Passwörter und Secrets — UNBEDINGT vor Produktiveinsatz ändern
 mysql:
@@ -182,10 +184,8 @@ Schema-Initialisierung (Tabellen existieren bereits).
 ```bash
 ansible-playbook -i hosts.yml only_containers/only_office_delete.yml
 
-# Auf dem Zielsystem — nur MySQL-Dataset löschen und neu anlegen
-zfs destroy -r <ZFS_POOL>/only_office/mysql
-zfs create -o compression=lz4 <ZFS_POOL>/only_office/mysql
-chmod 777 /<ZFS_POOL>/only_office/mysql
+# Auf dem Zielsystem — Datenpersistenz löschen
+rm -rf /var/pods/only_office
 
 ansible-playbook -i hosts.yml only_containers/only_office_create.yml
 ```

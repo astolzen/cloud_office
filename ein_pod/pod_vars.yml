@@ -56,13 +56,8 @@ images:
   docs:    "docker.io/onlyoffice/documentserver:latest"
 
 # ── Persistente Speicherung ───────────────────────────────────────────────────
-# ZFS wird empfohlen; alternativ beliebige Verzeichnisse auf dem Host nutzbar.
-zfs:
-  pool:   "<ZFS_POOL>"
-  parent: "<ZFS_POOL>/nextcloud_pod"
-
-mnt:
-  base: "/<ZFS_POOL>/nextcloud_pod"
+# Basisverzeichnis für alle persistenten Volumes auf dem Host.
+data_dir: "/var/pods/nextcloud_pod"
 
 # ── Secrets ───────────────────────────────────────────────────────────────────
 # Wird zwischen Document Server und Nextcloud-Connector geteilt.

@@ -18,7 +18,7 @@ als vier separate Podman-Container, jeder mit einer eigenen externen IP-Adresse
 im lokalen Netzwerk. Voraussetzung ist ein **gebridgtes Aardvark-Netzwerk**
 in Podman, das den Containern eigene IP-Adressen aus dem LAN-Bereich zuweist.
 
-**Persistenz:** ZFS-Datasets (lz4-komprimiert) für alle persistenten Daten.
+**Persistenz:** Unterverzeichnisse unter `/var/pods/nextcloud/` auf dem Host.
 
 **Besonderheit:** Maximale Netzwerk-Isolation, jeder Dienst ist direkt per
 eigener IP erreichbar.
@@ -32,6 +32,8 @@ einzigen Podman-Pod auf dem Host-Netzwerk. Der Pod exportiert
 Port **8088 → 80** (Nextcloud) und Port **8080 → 8080** (OnlyOffice).
 Die Container kommunizieren intern über `127.0.0.1` im gemeinsamen
 Pod-Netzwerk-Namespace.
+
+**Persistenz:** Unterverzeichnisse unter `/var/pods/nextcloud_pod/` auf dem Host.
 
 **Besonderheit:** Kein separates Bridge-Netzwerk nötig, einfachere
 Netzwerkkonfiguration.
@@ -57,6 +59,8 @@ Podman-Container (MySQL, Document Server, Community Server) mit je eigener
 externer IP im Aardvark-Bridge-Netzwerk. Kein Nextcloud, sondern die
 vollständige OnlyOffice-Suite als eigenständige Plattform.
 
+**Persistenz:** Unterverzeichnisse unter `/var/pods/only_office/` auf dem Host.
+
 **Besonderheit:** Community Server läuft mit `--privileged` und
 `--cgroupns=host`, da systemd als PID 1 im Container benötigt wird.
 
@@ -71,7 +75,6 @@ vollständige OnlyOffice-Suite als eigenständige Plattform.
 - Zielsystem: Enterprise Linux 9 (RHEL, AlmaLinux, Rocky Linux) oder Fedora
 - Podman auf dem Zielsystem installiert (für Rollouts 1, 2, 4)
 - Für Rollouts 1 und 4: gebridgtes Aardvark-Netzwerk in Podman vorhanden
-- Für Rollouts 1, 2, 4: ZFS-Pool auf dem Zielsystem vorhanden (empfohlen)
 
 ## Konfiguration
 
