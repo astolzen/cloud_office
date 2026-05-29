@@ -18,18 +18,22 @@ weitergeleitet, wo Admin-E-Mail und Passwort gesetzt werden.
 
 ---
 
-## Netzwerk-Voraussetzung: Gebridgtes Aardvark-Netzwerk
+## Netzwerk-Voraussetzung: Macvlan-Netzwerk auf einer Host-Bridge
 
 > **Wichtig:** Wie das `vier_container`-Rollout erfordert auch dieses Setup
-> ein gebridgtes Netzwerk in Podman (Aardvark-Plugin), damit die Container
-> eigene IP-Adressen aus dem LAN-Bereich erhalten.
+> ein Podman-Netzwerk vom Typ **macvlan**. Damit erhalten die Container eigene
+> MAC-Adressen und erscheinen als eigenständige Geräte im LAN.
+> Eine Linux-Bridge (`br_podman` o.ä.) muss auf dem Host vorhanden sein.
+
+Vollständige Beschreibung zur Netzwerk-Einrichtung:
+siehe [`vier_container/README.md`](../vier_container/README.md#netzwerk-voraussetzung-macvlan-netzwerk-auf-einer-host-bridge).
 
 ```bash
 podman network create \
-  --driver bridge \
+  --driver macvlan \
   --subnet <LAN_SUBNETZ> \
   --gateway <LAN_GATEWAY> \
-  -o parent=<HOST_NETZWERKINTERFACE> \
+  -o parent=<BRIDGE_INTERFACE> \
   <NETZWERK_NAME>
 ```
 
@@ -38,20 +42,20 @@ podman network create \
 ## Architektur
 
 ```
-LAN (<LAN_SUBNETZ>)
+LAN (<LAN_SUBNETZ>)  —  macvlan auf br_podman
     │
     ├─ <IP_OO_MYSQL>  only-office-mysql  MySQL 8.4
-    │                 ZFS: <ZFS_POOL>/only_office/mysql
+    │                 /var/pods/only_office/mysql/
     │
     ├─ <IP_OO_DOCS>   only-office-docs   Document Server
-    │                 ZFS: <ZFS_POOL>/only_office/docs_pgsql
-    │                      <ZFS_POOL>/only_office/docs_data
-    │                      <ZFS_POOL>/only_office/docs_logs
-    │                      <ZFS_POOL>/only_office/docs_lib
+    │                 /var/pods/only_office/docs_pgsql/
+    │                 /var/pods/only_office/docs_data/
+    │                 /var/pods/only_office/docs_logs/
+    │                 /var/pods/only_office/docs_lib/
     │
     └─ <IP_OO_APP>    only-office-app    Community Server
-                      ZFS: <ZFS_POOL>/only_office/app_data
-                           <ZFS_POOL>/only_office/app_logs
+                      /var/pods/only_office/app_data/
+                      /var/pods/only_office/app_logs/
 ```
 
 ### Besonderheiten des Community Servers

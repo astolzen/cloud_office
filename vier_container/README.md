@@ -15,35 +15,92 @@ erhält eine eigene externe IP-Adresse aus dem lokalen Netzwerk.
 
 ---
 
-## Netzwerk-Voraussetzung: Gebridgtes Aardvark-Netzwerk
+## Netzwerk-Voraussetzung: Macvlan-Netzwerk auf einer Host-Bridge
 
-> **Wichtig:** Dieses Setup erfordert ein gebridgtes Netzwerk in Podman,
-> das auf dem **Aardvark-DNS-Plugin** basiert. Nur mit diesem Netzwerktyp
-> können den Containern statische IP-Adressen aus dem lokalen LAN-Bereich
-> zugewiesen werden, sodass sie von außen direkt erreichbar sind.
+> **Wichtig:** Dieses Setup erfordert ein Podman-Netzwerk vom Typ **macvlan**.
+> Damit erhält jeder Container eine eigene MAC-Adresse und erscheint als
+> eigenständiges Gerät im LAN — mit einer eigenen IP-Adresse, direkt
+> erreichbar von anderen Hosts im Netzwerk.
 
-Ein passendes Netzwerk anlegen (einmalig auf dem Zielsystem):
+> **Warum macvlan statt bridge?** Ein normales Podman-Bridge-Netzwerk
+> (`--driver bridge`) erzeugt ein isoliertes internes Netzwerk mit NAT.
+> Container sind dann von außen nur über Port-Forwarding erreichbar.
+> Macvlan hingegen hängt die Container direkt an das physische Netzwerk-
+> Interface — sie bekommen echte LAN-IPs, ohne NAT oder Port-Mapping.
+
+### Voraussetzung: Linux-Bridge auf dem Host
+
+Macvlan in Podman benötigt als `parent`-Interface eine **Linux-Bridge**
+(kein physisches Ethernet-Interface direkt). Die Bridge muss auf dem
+Zielsystem einmalig angelegt und mit dem LAN-Interface verbunden werden.
+
+Beispiel mit `nmcli` (NetworkManager):
 
 ```bash
-# Netzwerk mit dem LAN-Subnetz anlegen (Werte anpassen)
+# Bridge anlegen
+nmcli connection add type bridge ifname br_podman con-name br_podman
+
+# Physisches Interface als Bridge-Mitglied hinzufügen (Interface-Name anpassen)
+nmcli connection add type ethernet ifname <PHYSISCHES_INTERFACE> \
+  master br_podman
+
+# Bridge aktivieren
+nmcli connection up br_podman
+```
+
+Alternativ mit `ip`-Kommandos (nicht persistent):
+
+```bash
+ip link add br_podman type bridge
+ip link set <PHYSISCHES_INTERFACE> master br_podman
+ip link set br_podman up
+ip link set <PHYSISCHES_INTERFACE> up
+```
+
+### Podman-Netzwerk anlegen
+
+Das macvlan-Netzwerk wird einmalig auf dem Zielsystem angelegt:
+
+```bash
 podman network create \
-  --driver bridge \
+  --driver macvlan \
   --subnet <LAN_SUBNETZ> \
   --gateway <LAN_GATEWAY> \
-  -o parent=<HOST_NETZWERKINTERFACE> \
+  -o parent=<BRIDGE_INTERFACE> \
   <NETZWERK_NAME>
 ```
 
-Beispiel für ein typisches Heimnetzwerk:
+Konkretes Beispiel (passt zur referenzierten Produktivkonfiguration):
 
 ```bash
 podman network create \
-  --driver bridge \
+  --driver macvlan \
   --subnet 192.168.2.0/24 \
   --gateway 192.168.2.1 \
-  -o parent=eth0 \
+  -o parent=br_podman \
   pub_net
 ```
+
+Die resultierende Netzwerkkonfiguration (`podman network inspect pub_net`)
+sieht dann in etwa so aus:
+
+```json
+{
+  "name": "pub_net",
+  "driver": "macvlan",
+  "network_interface": "br_podman",
+  "subnets": [
+    { "subnet": "192.168.2.0/24", "gateway": "192.168.2.1" }
+  ],
+  "ipv6_enabled": false,
+  "dns_enabled": false,
+  "ipam_options": { "driver": "host-local" }
+}
+```
+
+> **Hinweis:** Bei macvlan-Netzwerken ist `dns_enabled: false` normal —
+> Aardvark-DNS greift hier nicht. Die Container kommunizieren über ihre
+> statischen IPs, die im Playbook fest vergeben werden.
 
 Das Netzwerk muss existieren, bevor das Playbook ausgeführt wird.
 
@@ -52,21 +109,21 @@ Das Netzwerk muss existieren, bevor das Playbook ausgeführt wird.
 ## Architektur
 
 ```
-LAN (<LAN_SUBNETZ>)
+LAN (<LAN_SUBNETZ>)  —  macvlan auf br_podman
     │
     ├─ <IP_NC_MARIADB>  nc-mariadb   MariaDB LTS
-    │                   ZFS: <ZFS_POOL>/nextcloud/mariadb
+    │                   /var/pods/nextcloud/mariadb/
     │
-    ├─ <IP_NC_REDIS>    nc-redis     Valkey (ephemeral, kein ZFS-Volume)
+    ├─ <IP_NC_REDIS>    nc-redis     Valkey (ephemeral)
     │
     ├─ <IP_NC_APP>      nc-app       Nextcloud (Apache)
-    │                   ZFS: <ZFS_POOL>/nextcloud/app_html
+    │                   /var/pods/nextcloud/app_html/
     │
     └─ <IP_NC_DOCS>     nc-docs      OnlyOffice Document Server
-                        ZFS: <ZFS_POOL>/nextcloud/docs_pgsql
-                             <ZFS_POOL>/nextcloud/docs_data
-                             <ZFS_POOL>/nextcloud/docs_logs
-                             <ZFS_POOL>/nextcloud/docs_lib
+                        /var/pods/nextcloud/docs_pgsql/
+                        /var/pods/nextcloud/docs_data/
+                        /var/pods/nextcloud/docs_logs/
+                        /var/pods/nextcloud/docs_lib/
 ```
 
 Die OnlyOffice-Integration wird vom Playbook automatisch konfiguriert:

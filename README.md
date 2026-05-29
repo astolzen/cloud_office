@@ -74,7 +74,7 @@ vollständige OnlyOffice-Suite als eigenständige Plattform.
   ```
 - Zielsystem: Enterprise Linux 9 (RHEL, AlmaLinux, Rocky Linux) oder Fedora
 - Podman auf dem Zielsystem installiert (für Rollouts 1, 2, 4)
-- Für Rollouts 1 und 4: gebridgtes Aardvark-Netzwerk in Podman vorhanden
+- Für Rollouts 1 und 4: Podman-Netzwerk vom Typ **macvlan** auf einer Host-Bridge (`br_podman` o.ä.) vorhanden
 
 ## Konfiguration
 
