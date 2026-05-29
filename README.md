@@ -7,7 +7,7 @@ für verschiedene Varianten des automatisierten Rollouts von
 Alle Rollouts sind voneinander unabhängig und können je nach Anforderung
 (Isolation, Ressourcen, Netzwerkmodell) einzeln eingesetzt werden.
 
-_Hinweis: Die Dokumentationen und Ansible Playbooks in diesem Repository wurden mit Hilfe von KI-Tools (Claude Sonnet 4.6) erstellt_
+Hinweis: Die Dokumentationen und Ansible Playbooks in diesem Repository wurden mit Hilfe von KI-Tools (Claude Sonnet 4.6 & CursorAI) erstellt
 ---
 
 ## Übersicht der Rollout-Varianten
