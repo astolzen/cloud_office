@@ -2,7 +2,7 @@
 # pod_delete.yml
 #
 # Stoppt und entfernt den Podman-Pod und alle enthaltenen Container.
-# ZFS-Datasets und persistente Daten bleiben erhalten.
+# Persistente Daten unter /var/pods/nextcloud_pod/ bleiben erhalten.
 #
 # Nutzung:
 #   ansible-playbook -i hosts.yml ein_pod/pod_delete.yml

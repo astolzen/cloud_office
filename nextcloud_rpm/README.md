@@ -58,6 +58,9 @@ dnf update -y
 # EPEL und Basis-Werkzeuge
 dnf install -y epel-release curl wget tar bzip2 unzip nano policycoreutils-python-utils
 
+(Bei RHEL 9 läßt sich EPEL nicht direkt via dnf install epel-release einrichten. hier bitte
+ dnf install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm ausführen)
+
 # SELinux-Status prüfen — muss auf Enforcing stehen
 getenforce
 ```

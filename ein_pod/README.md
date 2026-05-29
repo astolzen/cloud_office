@@ -27,18 +27,18 @@ Host-System (<HOST_IP>)
                     │
                     │  gemeinsamer 127.0.0.1 (Pod-Netzwerk-Namespace)
                     ├─ :3306  ncp-mariadb   MariaDB LTS
-                    │         ZFS: <ZFS_POOL>/nextcloud_pod/mariadb
+                    │         /var/pods/nextcloud_pod/mariadb/
                     │
                     ├─ :6379  ncp-redis     Valkey (ephemeral)
                     │
                     ├─ :8080  ncp-docs      OnlyOffice Document Server
-                    │         ZFS: <ZFS_POOL>/nextcloud_pod/docs_pgsql
-                    │              <ZFS_POOL>/nextcloud_pod/docs_data
-                    │              <ZFS_POOL>/nextcloud_pod/docs_logs
-                    │              <ZFS_POOL>/nextcloud_pod/docs_lib
+                    │         /var/pods/nextcloud_pod/docs_pgsql/
+                    │         /var/pods/nextcloud_pod/docs_data/
+                    │         /var/pods/nextcloud_pod/docs_logs/
+                    │         /var/pods/nextcloud_pod/docs_lib/
                     │
                     └─ :80    ncp-app       Nextcloud (Apache)
-                              ZFS: <ZFS_POOL>/nextcloud_pod/app_html
+                              /var/pods/nextcloud_pod/app_html/
 ```
 
 ### Warum wird der Document-Server-nginx umkonfiguriert?
@@ -138,7 +138,7 @@ Das Playbook führt folgende Schritte aus:
 
 1. Kernel-Parameter `vm.overcommit_memory=1` für Valkey setzen
 2. Aktuelle Container-Images ziehen
-3. ZFS-Datasets anlegen (idempotent)
+3. Verzeichnisse unter `/var/pods/nextcloud_pod/` anlegen
 4. Verzeichnis-Berechtigungen setzen
 5. Podman-Pod auf Host-Netzwerk mit Ports 8088:80 und 8080:8080 erstellen
 6. MariaDB starten, auf Verbindungsbereitschaft warten
@@ -162,7 +162,7 @@ Nach Abschluss ist Nextcloud unter `http://<HOST_IP>:8088/` erreichbar.
 ansible-playbook -i hosts.yml ein_pod/pod_delete.yml
 ```
 
-Entfernt den Pod und alle enthaltenen Container. ZFS-Datasets bleiben erhalten.
+Entfernt den Pod und alle enthaltenen Container. Die Daten unter `/var/pods/nextcloud_pod/` bleiben erhalten.
 Ein erneutes Ausführen von `pod_create.yml` verbindet sich wieder mit der
 bestehenden Datenbank und Nextcloud-Installation.
 
