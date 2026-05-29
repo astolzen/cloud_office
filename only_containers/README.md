@@ -18,24 +18,16 @@ weitergeleitet, wo Admin-E-Mail und Passwort gesetzt werden.
 
 ---
 
-## Netzwerk-Voraussetzung: Macvlan-Netzwerk auf einer Host-Bridge
+## Netzwerk-Voraussetzung
 
-> **Wichtig:** Wie das `vier_container`-Rollout erfordert auch dieses Setup
-> ein Podman-Netzwerk vom Typ **macvlan**. Damit erhalten die Container eigene
-> MAC-Adressen und erscheinen als eigenständige Geräte im LAN.
-> Eine Linux-Bridge (`br_podman` o.ä.) muss auf dem Host vorhanden sein.
+Dieses Setup erfordert ein Podman-Netzwerk vom Typ **macvlan** auf einer
+Linux-Host-Bridge. Damit erhält jeder Container eine eigene IP-Adresse
+direkt im LAN — ohne NAT oder Port-Forwarding.
 
-Vollständige Beschreibung zur Netzwerk-Einrichtung:
-siehe [`vier_container/README.md`](../vier_container/README.md#netzwerk-voraussetzung-macvlan-netzwerk-auf-einer-host-bridge).
+Einrichtung und Hintergründe: siehe
+[`podman_bridge_networking.md`](../podman_bridge_networking.md).
 
-```bash
-podman network create \
-  --driver macvlan \
-  --subnet <LAN_SUBNETZ> \
-  --gateway <LAN_GATEWAY> \
-  -o parent=<BRIDGE_INTERFACE> \
-  <NETZWERK_NAME>
-```
+Das Netzwerk muss existieren, bevor das Playbook ausgeführt wird.
 
 ---
 
@@ -159,10 +151,10 @@ ansible-playbook -i hosts.yml only_containers/only_office_create.yml
 Das Playbook führt folgende Schritte aus:
 
 1. Aktuelle Container-Images ziehen
-2. ZFS-Datasets anlegen (idempotent)
-3. Verzeichnis-Berechtigungen setzen
+2. Verzeichnisse unter `/var/pods/only_office/` anlegen
+3. MySQL mit permissivem `sql_mode` starten
 4. MySQL mit permissivem `sql_mode` starten
-5. Auf MySQL-Bereitschaft warten, `sql_mode` auch zur Laufzeit setzen
+5. Auf MySQL-Bereitschaft warten, `sql_mode` auch zur Laufzeit erzwingen
 6. Document Server starten, auf `/healthcheck` warten
 7. Community Server mit `privileged + cgroupns=host + systemd=always` starten
 8. Auf Monoserve-FastCGI-Socket warten
@@ -177,9 +169,9 @@ Das Playbook führt folgende Schritte aus:
 ansible-playbook -i hosts.yml only_containers/only_office_delete.yml
 ```
 
-Stoppt und entfernt alle drei Container. ZFS-Datasets bleiben unberührt.
-Ein erneutes Ausführen von `only_office_create.yml` überspringt die
-Schema-Initialisierung (Tabellen existieren bereits).
+Stoppt und entfernt alle drei Container. Die Daten unter `/var/pods/only_office/`
+bleiben erhalten. Ein erneutes Ausführen von `only_office_create.yml` überspringt
+die Schema-Initialisierung (Tabellen existieren bereits).
 
 ---
 

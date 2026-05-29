@@ -15,92 +15,14 @@ erhält eine eigene externe IP-Adresse aus dem lokalen Netzwerk.
 
 ---
 
-## Netzwerk-Voraussetzung: Macvlan-Netzwerk auf einer Host-Bridge
+## Netzwerk-Voraussetzung
 
-> **Wichtig:** Dieses Setup erfordert ein Podman-Netzwerk vom Typ **macvlan**.
-> Damit erhält jeder Container eine eigene MAC-Adresse und erscheint als
-> eigenständiges Gerät im LAN — mit einer eigenen IP-Adresse, direkt
-> erreichbar von anderen Hosts im Netzwerk.
+Dieses Setup erfordert ein Podman-Netzwerk vom Typ **macvlan** auf einer
+Linux-Host-Bridge. Damit erhält jeder Container eine eigene IP-Adresse
+direkt im LAN — ohne NAT oder Port-Forwarding.
 
-> **Warum macvlan statt bridge?** Ein normales Podman-Bridge-Netzwerk
-> (`--driver bridge`) erzeugt ein isoliertes internes Netzwerk mit NAT.
-> Container sind dann von außen nur über Port-Forwarding erreichbar.
-> Macvlan hingegen hängt die Container direkt an das physische Netzwerk-
-> Interface — sie bekommen echte LAN-IPs, ohne NAT oder Port-Mapping.
-
-### Voraussetzung: Linux-Bridge auf dem Host
-
-Macvlan in Podman benötigt als `parent`-Interface eine **Linux-Bridge**
-(kein physisches Ethernet-Interface direkt). Die Bridge muss auf dem
-Zielsystem einmalig angelegt und mit dem LAN-Interface verbunden werden.
-
-Beispiel mit `nmcli` (NetworkManager):
-
-```bash
-# Bridge anlegen
-nmcli connection add type bridge ifname br_podman con-name br_podman
-
-# Physisches Interface als Bridge-Mitglied hinzufügen (Interface-Name anpassen)
-nmcli connection add type ethernet ifname <PHYSISCHES_INTERFACE> \
-  master br_podman
-
-# Bridge aktivieren
-nmcli connection up br_podman
-```
-
-Alternativ mit `ip`-Kommandos (nicht persistent):
-
-```bash
-ip link add br_podman type bridge
-ip link set <PHYSISCHES_INTERFACE> master br_podman
-ip link set br_podman up
-ip link set <PHYSISCHES_INTERFACE> up
-```
-
-### Podman-Netzwerk anlegen
-
-Das macvlan-Netzwerk wird einmalig auf dem Zielsystem angelegt:
-
-```bash
-podman network create \
-  --driver macvlan \
-  --subnet <LAN_SUBNETZ> \
-  --gateway <LAN_GATEWAY> \
-  -o parent=<BRIDGE_INTERFACE> \
-  <NETZWERK_NAME>
-```
-
-Konkretes Beispiel (passt zur referenzierten Produktivkonfiguration):
-
-```bash
-podman network create \
-  --driver macvlan \
-  --subnet 192.168.2.0/24 \
-  --gateway 192.168.2.1 \
-  -o parent=br_podman \
-  pub_net
-```
-
-Die resultierende Netzwerkkonfiguration (`podman network inspect pub_net`)
-sieht dann in etwa so aus:
-
-```json
-{
-  "name": "pub_net",
-  "driver": "macvlan",
-  "network_interface": "br_podman",
-  "subnets": [
-    { "subnet": "192.168.2.0/24", "gateway": "192.168.2.1" }
-  ],
-  "ipv6_enabled": false,
-  "dns_enabled": false,
-  "ipam_options": { "driver": "host-local" }
-}
-```
-
-> **Hinweis:** Bei macvlan-Netzwerken ist `dns_enabled: false` normal —
-> Aardvark-DNS greift hier nicht. Die Container kommunizieren über ihre
-> statischen IPs, die im Playbook fest vergeben werden.
+Einrichtung und Hintergründe: siehe
+[`podman_bridge_networking.md`](../podman_bridge_networking.md).
 
 Das Netzwerk muss existieren, bevor das Playbook ausgeführt wird.
 
