@@ -1,0 +1,21 @@
+---
+# pod_delete.yml
+#
+# Stoppt und entfernt den Podman-Pod und alle enthaltenen Container.
+# ZFS-Datasets und persistente Daten bleiben erhalten.
+#
+# Nutzung:
+#   ansible-playbook -i hosts.yml ein_pod/pod_delete.yml
+
+- name: nc-pod und alle Container entfernen (Daten bleiben erhalten)
+  hosts: <ZIELHOST>
+  gather_facts: false
+  vars_files:
+    - pod_vars.yml
+
+  tasks:
+
+    - name: Pod entfernen (stoppt und entfernt alle enthaltenen Container)
+      containers.podman.podman_pod:
+        name:  "{{ pod.name }}"
+        state: absent

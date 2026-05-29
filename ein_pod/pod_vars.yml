@@ -1,0 +1,70 @@
+---
+# pod_vars.yml – Variablen für das ein_pod-Rollout
+#
+# Alle vier Dienste laufen in einem einzigen Podman-Pod auf dem Host-Netzwerk.
+#
+# Portweiterleitung:
+#   8088 → 80    (Nextcloud)
+#   8080 → 8080  (OnlyOffice Document Server)
+#
+# Die Container kommunizieren intern über 127.0.0.1 im gemeinsamen
+# Pod-Netzwerk-Namespace (kein separates Bridge-Netzwerk nötig).
+#
+# Der Document Server nginx läuft standardmäßig auf Port 80.
+# Das Playbook patcht ihn auf Port 8080, damit er nicht mit Nextclouds
+# Apache im gemeinsamen Namespace kollidiert.
+
+# ── Pod ──────────────────────────────────────────────────────────────────────
+pod:
+  name: "nc-pod"
+  network: "host"
+  publish:
+    - "8088:80"
+    - "8080:8080"
+
+# ── MariaDB ───────────────────────────────────────────────────────────────────
+mariadb:
+  name:          "ncp-mariadb"
+  root_password: "BITTE_AENDERN_DB_ROOT"
+  database:      "nextcloud"
+  user:          "nextcloud"
+  password:      "BITTE_AENDERN_DB_PASS"
+
+# ── Valkey (Redis-kompatibel) ─────────────────────────────────────────────────
+redis:
+  name: "ncp-redis"
+
+# ── Nextcloud ─────────────────────────────────────────────────────────────────
+app:
+  name:           "ncp-app"
+  admin_user:     "admin"
+  admin_password: "BITTE_AENDERN_ADMIN_PASS"
+  # Trusted domain: Host-IP oder Hostname, unter dem Nextcloud erreichbar ist
+  trusted_domain: "<HOST_IP_ODER_HOSTNAME>"
+
+# ── OnlyOffice Document Server ────────────────────────────────────────────────
+# port: Ziel-Port nach dem nginx-Patch (muss von 80 abweichen — Nextclouds Port)
+docs:
+  name: "ncp-docs"
+  port: "8080"
+
+# ── Container-Images ──────────────────────────────────────────────────────────
+images:
+  mariadb: "docker.io/mariadb:lts"
+  redis:   "docker.io/valkey/valkey:alpine"
+  app:     "docker.io/nextcloud:latest"
+  docs:    "docker.io/onlyoffice/documentserver:latest"
+
+# ── Persistente Speicherung ───────────────────────────────────────────────────
+# ZFS wird empfohlen; alternativ beliebige Verzeichnisse auf dem Host nutzbar.
+zfs:
+  pool:   "<ZFS_POOL>"
+  parent: "<ZFS_POOL>/nextcloud_pod"
+
+mnt:
+  base: "/<ZFS_POOL>/nextcloud_pod"
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# Wird zwischen Document Server und Nextcloud-Connector geteilt.
+# Muss auf beiden Seiten identisch sein. Vor Produktiveinsatz ändern.
+jwt_secret: "BITTE_AENDERN_JWT_SECRET"

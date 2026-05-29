@@ -1,0 +1,29 @@
+---
+# only_office_delete.yml
+#
+# Stoppt und entfernt alle ONLYOFFICE-Container.
+# ZFS-Datasets und persistente Daten bleiben erhalten.
+#
+# Nutzung:
+#   ansible-playbook -i hosts.yml only_containers/only_office_delete.yml
+
+- name: ONLYOFFICE-Container entfernen (Daten bleiben erhalten)
+  hosts: <ZIELHOST>
+  gather_facts: false
+
+  tasks:
+
+    - name: Community-Server-Container entfernen
+      containers.podman.podman_container:
+        name:  "only-office-app"
+        state: absent
+
+    - name: Document-Server-Container entfernen
+      containers.podman.podman_container:
+        name:  "only-office-docs"
+        state: absent
+
+    - name: MySQL-Container entfernen
+      containers.podman.podman_container:
+        name:  "only-office-mysql"
+        state: absent

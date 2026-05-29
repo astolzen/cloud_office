@@ -1,0 +1,15 @@
+# Ansible temporäre Dateien
+*.retry
+*.log
+.ansible/
+
+# Sensible Variablendateien (lokale Overrides)
+*_secrets.yml
+*_local.yml
+vault.yml
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~

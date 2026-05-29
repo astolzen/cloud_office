@@ -1,0 +1,34 @@
+---
+# nextcloud_delete.yml
+#
+# Stoppt und entfernt alle Nextcloud + OnlyOffice Container.
+# ZFS-Datasets und persistente Daten bleiben erhalten.
+#
+# Nutzung:
+#   ansible-playbook -i hosts.yml vier_container/nextcloud_delete.yml
+
+- name: Nextcloud + OnlyOffice Container entfernen (Daten bleiben erhalten)
+  hosts: <ZIELHOST>
+  gather_facts: false
+
+  tasks:
+
+    - name: Nextcloud-Container entfernen
+      containers.podman.podman_container:
+        name:  "nc-app"
+        state: absent
+
+    - name: OnlyOffice Document Server Container entfernen
+      containers.podman.podman_container:
+        name:  "nc-docs"
+        state: absent
+
+    - name: Valkey-Container entfernen
+      containers.podman.podman_container:
+        name:  "nc-redis"
+        state: absent
+
+    - name: MariaDB-Container entfernen
+      containers.podman.podman_container:
+        name:  "nc-mariadb"
+        state: absent

@@ -1,0 +1,340 @@
+---
+# nextcloud_create.yml
+#
+# Deployt Nextcloud mit OnlyOffice Document Server als vier eigenständige
+# Podman-Container im Bridge-Netzwerk (Aardvark).
+#
+# Container:
+#   nc-mariadb  <IP_NC_MARIADB>  MariaDB LTS   (Nextcloud-Datenbank)
+#   nc-redis    <IP_NC_REDIS>    Valkey alpine  (Cache + File-Locking)
+#   nc-app      <IP_NC_APP>      Nextcloud      (Apache)
+#   nc-docs     <IP_NC_DOCS>     OnlyOffice Document Server
+#
+# Voraussetzung: gebridgtes Aardvark-Netzwerk in Podman (siehe README.md)
+#
+# Nutzung:
+#   ansible-playbook -i hosts.yml vier_container/nextcloud_create.yml
+#
+# Update (neue Images, Daten bleiben):
+#   ansible-playbook -i hosts.yml vier_container/nextcloud_delete.yml
+#   ansible-playbook -i hosts.yml vier_container/nextcloud_create.yml
+
+- name: Nextcloud + OnlyOffice Document Server deployen
+  hosts: <ZIELHOST>
+  gather_facts: false
+
+  vars:
+    mariadb:
+      name:          "nc-mariadb"
+      ip:            "<IP_NC_MARIADB>"
+      mac:           "<MAC_NC_MARIADB>"
+      root_password: "BITTE_AENDERN_DB_ROOT"
+      database:      "nextcloud"
+      user:          "nextcloud"
+      password:      "BITTE_AENDERN_DB_PASS"
+    redis:
+      name: "nc-redis"
+      ip:   "<IP_NC_REDIS>"
+      mac:  "<MAC_NC_REDIS>"
+    app:
+      name:           "nc-app"
+      ip:             "<IP_NC_APP>"
+      mac:            "<MAC_NC_APP>"
+      admin_user:     "admin"
+      admin_password: "BITTE_AENDERN_ADMIN_PASS"
+      trusted_domain: "<IP_NC_APP>"
+    docs:
+      name: "nc-docs"
+      ip:   "<IP_NC_DOCS>"
+      mac:  "<MAC_NC_DOCS>"
+    net: "<NETZWERK_NAME>"
+    images:
+      mariadb: "docker.io/mariadb:lts"
+      redis:   "docker.io/valkey/valkey:alpine"
+      app:     "docker.io/nextcloud:latest"
+      docs:    "docker.io/onlyoffice/documentserver:latest"
+    zfs:
+      pool:   "<ZFS_POOL>"
+      parent: "<ZFS_POOL>/nextcloud"
+    mnt:
+      base: "/<ZFS_POOL>/nextcloud"
+    # JWT-Secret wird zwischen Document Server und Nextcloud-Connector geteilt.
+    # Muss auf beiden Seiten identisch sein.
+    jwt_secret: "BITTE_AENDERN_JWT_SECRET"
+
+  tasks:
+
+    # ── 0. Host-Tuning ───────────────────────────────────────────────────────
+    # Valkey benötigt vm.overcommit_memory=1 für sichere Hintergrund-Saves.
+    - name: vm.overcommit_memory=1 für Valkey setzen
+      ansible.posix.sysctl:
+        name:   vm.overcommit_memory
+        value:  "1"
+        state:  present
+        reload: true
+
+    # ── 1. Images ziehen ─────────────────────────────────────────────────────
+    - name: Aktuelle Container-Images ziehen
+      containers.podman.podman_image:
+        name:  "{{ item }}"
+        state: present
+        force: true
+      loop:
+        - "{{ images.mariadb }}"
+        - "{{ images.redis }}"
+        - "{{ images.app }}"
+        - "{{ images.docs }}"
+
+    # ── 2. ZFS-Datasets anlegen ──────────────────────────────────────────────
+    - name: Übergeordnetes ZFS-Dataset anlegen
+      community.general.zfs:
+        name:  "{{ zfs.parent }}"
+        state: present
+        extra_zfs_properties:
+          compression: lz4
+
+    - name: ZFS-Datasets für persistente Volumes anlegen
+      community.general.zfs:
+        name:  "{{ zfs.pool }}/nextcloud/{{ item }}"
+        state: present
+        extra_zfs_properties:
+          compression: lz4
+      loop:
+        - mariadb
+        - app_html
+        - docs_pgsql
+        - docs_data
+        - docs_logs
+        - docs_lib
+
+    # ── 3. Berechtigungen setzen ─────────────────────────────────────────────
+    - name: Berechtigungen auf Volume-Verzeichnissen setzen
+      ansible.builtin.file:
+        path:  "{{ mnt.base }}/{{ item }}"
+        owner: root
+        group: root
+        mode:  '0777'
+        state: directory
+      loop:
+        - mariadb
+        - app_html
+        - docs_pgsql
+        - docs_data
+        - docs_logs
+        - docs_lib
+
+    # ── 4. MariaDB-Container ─────────────────────────────────────────────────
+    - name: MariaDB-Container starten
+      containers.podman.podman_container:
+        name:        "{{ mariadb.name }}"
+        image:       "{{ images.mariadb }}"
+        state:       started
+        network:     "{{ net }}:ip={{ mariadb.ip }}"
+        mac_address: "{{ mariadb.mac }}"
+        volumes:
+          - "{{ mnt.base }}/mariadb:/var/lib/mysql:Z"
+          - "/etc/localtime:/etc/localtime:ro"
+        env:
+          MARIADB_ROOT_PASSWORD:      "{{ mariadb.root_password }}"
+          MARIADB_DATABASE:           "{{ mariadb.database }}"
+          MARIADB_USER:               "{{ mariadb.user }}"
+          MARIADB_PASSWORD:           "{{ mariadb.password }}"
+          # Für 4-Byte-UTF-8 (Emoji) in Nextcloud erforderlich
+          MARIADB_INITDB_SKIP_TZINFO: "1"
+        command: >-
+          --transaction-isolation=READ-COMMITTED
+          --log-bin=binlog
+          --binlog-format=ROW
+
+    # ── 5. Warten auf MariaDB ────────────────────────────────────────────────
+    - name: Warten bis MariaDB Verbindungen annimmt
+      ansible.builtin.command:
+        cmd: >
+          podman exec {{ mariadb.name }}
+          mariadb-admin ping -h localhost -uroot -p{{ mariadb.root_password }} --silent
+      register: _db_ready
+      until: _db_ready.rc == 0
+      retries: 30
+      delay: 5
+      changed_when: false
+
+    # ── 6. Valkey-Container ──────────────────────────────────────────────────
+    - name: Valkey-Container starten
+      containers.podman.podman_container:
+        name:        "{{ redis.name }}"
+        image:       "{{ images.redis }}"
+        state:       started
+        network:     "{{ net }}:ip={{ redis.ip }}"
+        mac_address: "{{ redis.mac }}"
+        volumes:
+          - "/etc/localtime:/etc/localtime:ro"
+        # RDB-Persistenz deaktiviert — Valkey dient als Cache/Lock-Store.
+        command: >-
+          valkey-server
+          --loglevel notice
+          --save ""
+          --appendonly no
+
+    # ── 7. OnlyOffice Document Server ────────────────────────────────────────
+    - name: OnlyOffice Document Server starten
+      containers.podman.podman_container:
+        name:        "{{ docs.name }}"
+        image:       "{{ images.docs }}"
+        state:       started
+        network:     "{{ net }}:ip={{ docs.ip }}"
+        mac_address: "{{ docs.mac }}"
+        volumes:
+          - "{{ mnt.base }}/docs_pgsql:/var/lib/postgresql:Z"
+          - "{{ mnt.base }}/docs_data:/var/www/onlyoffice/Data:Z"
+          - "{{ mnt.base }}/docs_logs:/var/log/onlyoffice:Z"
+          - "{{ mnt.base }}/docs_lib:/var/lib/onlyoffice:Z"
+          - "/etc/localtime:/etc/localtime:ro"
+        env:
+          JWT_ENABLED: "true"
+          JWT_SECRET:  "{{ jwt_secret }}"
+
+    # ── 8. Nextcloud-Container ───────────────────────────────────────────────
+    - name: Nextcloud-Container starten
+      containers.podman.podman_container:
+        name:        "{{ app.name }}"
+        image:       "{{ images.app }}"
+        state:       started
+        network:     "{{ net }}:ip={{ app.ip }}"
+        mac_address: "{{ app.mac }}"
+        volumes:
+          - "{{ mnt.base }}/app_html:/var/www/html:Z"
+          - "/etc/localtime:/etc/localtime:ro"
+        env:
+          MYSQL_HOST:                "{{ mariadb.ip }}"
+          MYSQL_DATABASE:            "{{ mariadb.database }}"
+          MYSQL_USER:                "{{ mariadb.user }}"
+          MYSQL_PASSWORD:            "{{ mariadb.password }}"
+          REDIS_HOST:                "{{ redis.ip }}"
+          REDIS_HOST_PORT:           "6379"
+          NEXTCLOUD_ADMIN_USER:      "{{ app.admin_user }}"
+          NEXTCLOUD_ADMIN_PASSWORD:  "{{ app.admin_password }}"
+          NEXTCLOUD_TRUSTED_DOMAINS: "{{ app.trusted_domain }}"
+
+    # ── 9. Warten auf Document-Server-Healthcheck ────────────────────────────
+    - name: Warten auf Document-Server-Healthcheck
+      ansible.builtin.command:
+        cmd: "podman exec {{ docs.name }} curl -sf http://localhost/healthcheck"
+      register: _docs_ready
+      until: _docs_ready.rc == 0 and _docs_ready.stdout == "true"
+      retries: 30
+      delay: 10
+      changed_when: false
+
+    # ── 10. Warten auf Nextcloud-Erstinstallation ────────────────────────────
+    # Das Nextcloud-Image installiert sich beim ersten Start selbst.
+    # Dieser Vorgang kann 60–120 Sekunden dauern.
+    - name: Warten bis Nextcloud-Webinterface bereit ist
+      ansible.builtin.command:
+        cmd: >
+          podman exec {{ app.name }}
+          curl -sf -o /dev/null -w "%{http_code}"
+          http://localhost/status.php
+      register: _nc_ready
+      until: _nc_ready.rc == 0 and _nc_ready.stdout == "200"
+      retries: 40
+      delay: 10
+      changed_when: false
+
+    # ── 11. OnlyOffice-Connector-App installieren ────────────────────────────
+    - name: Prüfen ob OnlyOffice-Connector bereits installiert ist
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ app:list --output=json
+      register: _app_list
+      changed_when: false
+
+    - name: OnlyOffice-Connector aus dem Nextcloud Appstore installieren
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ app:install onlyoffice
+      when: '"onlyoffice" not in _app_list.stdout'
+      register: _install_result
+      failed_when:
+        - _install_result.rc != 0
+        - '"already installed" not in _install_result.stderr | default("")'
+
+    - name: OnlyOffice-Connector-App aktivieren
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ app:enable onlyoffice
+      changed_when: true
+
+    # ── 12. OnlyOffice-Connector konfigurieren ───────────────────────────────
+    - name: Document-Server öffentliche URL setzen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:app:set onlyoffice DocumentServerUrl
+          --value="http://{{ docs.ip }}/"
+      changed_when: true
+
+    - name: Document-Server interne URL setzen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:app:set onlyoffice DocumentServerInternalUrl
+          --value="http://{{ docs.ip }}/"
+      changed_when: true
+
+    - name: Storage-URL (Callback-URL für Document Server) setzen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:app:set onlyoffice StorageUrl
+          --value="http://{{ app.ip }}/"
+      changed_when: true
+
+    - name: JWT im OnlyOffice-Connector aktivieren
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:app:set onlyoffice jwt_enabled
+          --value="true"
+      changed_when: true
+
+    - name: JWT-Secret im OnlyOffice-Connector setzen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:app:set onlyoffice jwt_secret
+          --value="{{ jwt_secret }}"
+      changed_when: true
+
+    - name: JWT-Header im OnlyOffice-Connector setzen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:app:set onlyoffice jwt_header
+          --value="Authorization"
+      changed_when: true
+
+    # ── 13. Nextcloud Post-Install-Tweaks ────────────────────────────────────
+    - name: Standard-Telefonregion setzen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:system:set default_phone_region --value="DE"
+      changed_when: true
+
+    - name: Nextcloud-Wartungsfenster aktivieren (nachts)
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ config:system:set maintenance_window_start --type=integer --value=1
+      changed_when: true
+
+    - name: Nextcloud-Hintergrundjobs einmalig ausführen
+      ansible.builtin.command:
+        cmd: >
+          podman exec --user www-data {{ app.name }}
+          php occ background:cron
+      changed_when: true
+      ignore_errors: true
