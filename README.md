@@ -1,4 +1,4 @@
-# cloud_office – Nextcloud & OnlyOffice Rollout-Sammlung
+# Cloud_office – Nextcloud & OnlyOffice Rollout-Sammlung
 
 Dieses Repository enthält Ansible-Playbooks und Schritt-für-Schritt-Anleitungen
 für verschiedene Varianten des automatisierten Rollouts von
@@ -7,6 +7,7 @@ für verschiedene Varianten des automatisierten Rollouts von
 Alle Rollouts sind voneinander unabhängig und können je nach Anforderung
 (Isolation, Ressourcen, Netzwerkmodell) einzeln eingesetzt werden.
 
+_Hinweis: Die Dokumentationen und Ansible Playbooks in diesem Repository wurden mit Hilfe von KI-Tools (Claude Sonnet 4.6) erstellt_
 ---
 
 ## Übersicht der Rollout-Varianten
