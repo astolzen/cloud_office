@@ -2,7 +2,7 @@
 # nextcloud_delete.yml
 #
 # Stoppt und entfernt alle Nextcloud + OnlyOffice Container.
-# ZFS-Datasets und persistente Daten bleiben erhalten.
+# Persistente Daten unter /var/pods/nextcloud/ bleiben erhalten.
 #
 # Nutzung:
 #   ansible-playbook -i hosts.yml vier_container/nextcloud_delete.yml

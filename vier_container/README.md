@@ -146,7 +146,7 @@ Das Playbook führt folgende Schritte aus:
 
 1. Kernel-Parameter `vm.overcommit_memory=1` für Valkey setzen
 2. Aktuelle Container-Images ziehen
-3. ZFS-Datasets anlegen (idempotent)
+3. Verzeichnisse unter `/var/pods/nextcloud/` anlegen
 4. Verzeichnis-Berechtigungen setzen
 5. MariaDB starten, auf Verbindungsbereitschaft warten
 6. Valkey und OnlyOffice Document Server starten
@@ -167,7 +167,7 @@ Nach Abschluss ist Nextcloud unter `http://<IP_NC_APP>/` erreichbar.
 ansible-playbook -i hosts.yml vier_container/nextcloud_delete.yml
 ```
 
-Stoppt und entfernt alle vier Container. ZFS-Datasets bleiben unberührt.
+Stoppt und entfernt alle vier Container. Die Daten unter `/var/pods/nextcloud/` bleiben erhalten.
 Ein erneutes Ausführen von `nextcloud_create.yml` verbindet sich wieder
 mit der bestehenden Datenbank und Installation.
 
